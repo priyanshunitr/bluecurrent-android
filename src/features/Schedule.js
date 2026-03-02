@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -11,6 +11,9 @@ import AlarmForm from '../components/Schedule/AlarmForm';
 import AlarmList from '../components/Schedule/AlarmList';
 import AlarmModal from '../components/Schedule/AlarmModal';
 
+import { loadSchedules, saveSchedules } from '../utils/alarmStorage';
+import { scheduleNotification, cancelNotification, rescheduleAllNotifications } from '../utils/alarmNotifications';
+
 export default function Schedule() {
   const [hour, setHour] = useState('');
   const [minute, setMinute] = useState('');
@@ -21,10 +24,40 @@ export default function Schedule() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
   const [activeAlarm, setActiveAlarm] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   
   const triggeredAlarms = useRef(new Set());
 
-  // Heartbeat: Update clock and check for alarms
+  // Load persisted schedules on mount & re-schedule native notifications
+  useEffect(() => {
+    (async () => {
+      const saved = await loadSchedules();
+      
+      // Filter out particular-day alarms that are already in the past
+      const now = new Date();
+      const activeSchedules = saved.filter((s) => {
+        if (s.type === 'particular') {
+          const targetYear = s.year < 100 ? 2000 + s.year : s.year;
+          const target = new Date(targetYear, s.month - 1, s.date, s.hour, s.minute, 0);
+          return target > now;
+        }
+        return true;
+      });
+
+      // If we filtered out any expired ones, save the cleaned list
+      if (activeSchedules.length !== saved.length) {
+        await saveSchedules(activeSchedules);
+      }
+
+      setSchedules(activeSchedules);
+      setLoaded(true);
+
+      // Re-register all notifications with the OS
+      await rescheduleAllNotifications(activeSchedules);
+    })();
+  }, []);
+
+  // Heartbeat: Update clock and check for in-app alarms
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
@@ -70,7 +103,7 @@ export default function Schedule() {
     return () => clearInterval(interval);
   }, [schedules]);
 
-  const addSchedule = () => {
+  const addSchedule = useCallback(async () => {
     const h = parseInt(hour);
     const m = parseInt(minute);
 
@@ -90,15 +123,30 @@ export default function Schedule() {
       year: parseInt(date.y) || 0,
     };
 
-    setSchedules([...schedules, newSchedule]);
+    const updated = [...schedules, newSchedule];
+    setSchedules(updated);
     setHour('');
     setMinute('');
-    Alert.alert('Success', 'Alarm set!');
-  };
 
-  const removeSchedule = (id) => {
-    setSchedules(schedules.filter((s) => s.id !== id));
-  };
+    // Persist to storage
+    await saveSchedules(updated);
+
+    // Schedule native notification
+    await scheduleNotification(newSchedule);
+
+    Alert.alert('Success', 'Alarm set!');
+  }, [hour, minute, type, selectedDay, date, schedules]);
+
+  const removeSchedule = useCallback(async (id) => {
+    const updated = schedules.filter((s) => s.id !== id);
+    setSchedules(updated);
+
+    // Persist to storage
+    await saveSchedules(updated);
+
+    // Cancel the native notification
+    await cancelNotification(id);
+  }, [schedules]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
