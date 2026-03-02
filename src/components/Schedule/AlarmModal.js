@@ -3,15 +3,22 @@ import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export default function AlarmModal({ showModal, setShowModal, activeAlarm }) {
+export default function AlarmModal({ showModal, setShowModal, activeAlarm, removeSchedule }) {
   if (!activeAlarm) return null;
+
+  const handleDismiss = () => {
+    if (activeAlarm.type === 'particular' && removeSchedule) {
+      removeSchedule(activeAlarm.id);
+    }
+    setShowModal(false);
+  };
 
   return (
     <Modal
       animationType="fade"
       transparent={true}
       visible={showModal}
-      onRequestClose={() => setShowModal(false)}
+      onRequestClose={handleDismiss}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
@@ -31,7 +38,7 @@ export default function AlarmModal({ showModal, setShowModal, activeAlarm }) {
           </View>
           <TouchableOpacity 
             style={styles.dismissBtn} 
-            onPress={() => setShowModal(false)}
+            onPress={handleDismiss}
           >
             <Text style={styles.dismissBtnText}>DISMISS</Text>
           </TouchableOpacity>

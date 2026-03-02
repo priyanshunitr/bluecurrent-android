@@ -122,6 +122,7 @@ export default function Schedule() {
         showModal={showModal} 
         setShowModal={setShowModal} 
         activeAlarm={activeAlarm} 
+        removeSchedule={removeSchedule}
       />
     </ScrollView>
   );
